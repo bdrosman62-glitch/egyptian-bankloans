@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>مقارنة قروض البنوك المصرية — Loan Comparison</title>
+<style>
+  :root{--accent:#fbbf24;--card-bg:rgba(255,255,255,0.13);--card-detail:rgba(255,255,255,0.08)}
+  body{margin:0;font-family:"Cairo",sans-serif;background:linear-gradient(135deg,#3b82f6,#9333ea,#fbbf24);color:#fff;min-height:100vh}
+  header{position:fixed;top:0;left:0;right:0;padding:12px 20px;display:flex;gap:12px;align-items:center;justify-content:space-between;background:rgba(0,0,0,0.35);backdrop-filter:blur(6px);z-index:1000}
+  #searchBar{width:60%;padding:10px 14px;border-radius:28px;border:none;outline:none;font-size:1rem}
+  #langToggle{background:var(--accent);border:none;border-radius:18px;padding:8px 14px;cursor:pointer;color:#000;font-weight:700}
+  main{padding:120px 20px 40px;max-width:1100px;margin:0 auto}
+  .bank{background:var(--card-bg);border-radius:14px;padding:0;margin-bottom:14px;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,0.12)}
+  .bank h2{margin:0;padding:14px 16px;cursor:pointer;background:rgba(0,0,0,0.22)}
+  .details{display:none;padding:14px;background:var(--card-detail)}
+  .meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .loans{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .loan{background:rgba(0,0,0,0.18);padding:10px;border-radius:10px}
+  .loan h4{margin:0 0 6px 0}
+  .loan p{margin:0;font-size:0.95rem;line-height:1.3}
+  a.site{color:var(--accent);text-decoration:none;font-weight:600}
+  .calculator{background:rgba(255,255,255,0.12);padding:14px;border-radius:12px;margin-top:18px}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  input[type=number]{padding:8px;border-radius:8px;border:none;outline:none;min-width:120px}
+  button.btn{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer}
+  p#result{margin-top:10px;font-weight:700}
+  /* small */
+  @media(max-width:600px){#searchBar{width:62%}}
+</style>
+</head>
+<body>
+<header>
+  <input id="searchBar" placeholder="ابحث عن بنك أو نوع قرض... / Search bank or loan type..." />
+  <button id="langToggle">English</button>
+</header>
+
+<main id="banksList"></main>
+
+<!-- Calculator -->
+<section style="max-width:1100px;margin:0 auto;padding:0 20px 40px;">
+  <div class="calculator" id="calcCard">
+    <h3 id="calcTitle">حاسبة القرض التقريبية</h3>
+    <p id="calcDesc">أدخل المبلغ، نسبة الفائدة السنوية، وعدد السنوات لحساب القسط الشهري التقريبي.</p>
+    <div class="row">
+      <input type="number" id="amount" placeholder="المبلغ (جنيه) / Amount EGP" />
+      <input type="number" id="rate" placeholder="نسبة الفائدة (%) / Annual rate" />
+      <input type="number" id="years" placeholder="عدد السنوات / Years" />
+      <button class="btn" id="calcBtn">احسب / Calculate</button>
+    </div>
+    <p id="result"></p>
+  </div>
+</section>
+
+<script>
+/*
+  مصدر البيانات: سحبت أنواع القروض والأوراق تقريباً من صفحات البنوك الرسمية (روابط داخل المحادثة).
+  الصفحة ثنائية اللغة — التبديل يغير النصوص وأسماء القروض المعروضة.
+*/
+
+const banks = [
+  // 1) National Bank of Egypt
+  {
+    ar: "البنك الأهلي المصري",
+    en: "National Bank of Egypt",
+    descAr: "برامج نقدية وشخصية وميسَّرة (قروض شخصية، قرض بضمان ودائع، قروض سيارات، تمويل عقاري...).",
+    descEn: "Personal cash loans, secured loans against deposits, auto finance, mortgage programs.",
+    site: "https://www.nbe.com.eg",
+    loans: [
+      { nameAr: "قرض شخصي (Cash/Personal)", nameEn: "Personal / Cash Loan", docsAr: "صورة بطاقة الرقم القومي، إثبات دخل/تحويل مرتب، كشف حساب بنكي حديث", docsEn: "ID copy, proof of income/payroll transfer, recent bank statement" },
+      { nameAr: "قرض بضمان ودائع", nameEn: "Loan against Deposit (Secured)", docsAr: "سندات الإيداع/شهادة ادخار، بطاقة الرقم القومي", docsEn: "Deposit certificate, ID copy" },
+      { nameAr: "تمويل سيارات", nameEn: "Car Finance", docsAr: "بطاقة الرقم القومي، رخصة/فواتير السيارة، إثبات دخل", docsEn: "ID copy, car documents, proof of income" }
+    ]
+  },
+
+  // 2) Banque Misr
+  {
+    ar: "بنك مصر",
+    en: "Banque Misr",
+    descAr: "قروض شخصية، تمويل سيارات، برامج إسكان وتمويل مشروعات صغيرة حسب برامج البنك المركزي.",
+    descEn: "Personal loans, car finance, housing programs and SME financing.",
+    site: "https://www.banquemisr.com.eg",
+    loans: [
+      { nameAr: "قرض شخصي", nameEn: "Personal Loan", docsAr: "بطاقة الرقم القومي، كشف راتب/إثبات دخل، كشف حساب 3 أشهر", docsEn: "ID, salary slip/proof of income, 3 months bank stmt" },
+      { nameAr: "قرض سيارة", nameEn: "Car Loan", docsAr: "بطاقة الرقم القومي، عقد شراء/مستندات السيارة، إثبات دخل", docsEn: "ID, car purchase documents, proof of income" },
+      { nameAr: "قرض إسكان", nameEn: "Housing Loan", docsAr: "بطاقة الرقم القومي، مستندات الملكية أو عقد حجز، إثبات دخل", docsEn: "ID, property docs/booking contract, proof of income" }
+    ]
+  },
+
+  // 3) CIB
+  {
+    ar: "CIB البنك التجاري الدولي",
+    en: "Commercial International Bank (CIB)",
+    descAr: "قروض شخصية مرنة عبر الإنترنت، حاسبة القروض، برامج موظفين ومحترفين.",
+    descEn: "Flexible personal loans (online apply), payroll and professional customer programs.",
+    site: "https://www.cibeg.com",
+    loans: [
+      { nameAr: "قرض شخصي (Payroll/Unsecured)", nameEn: "Personal Loan (Payroll/Unsecured)", docsAr: "بطاقة الرقم القومي، تحويل مرتب أو إثبات دخل، كشف حساب", docsEn: "ID, payroll transfer or proof of income, bank statement" },
+      { nameAr: "قرض سيارة", nameEn: "Car Loan", docsAr: "بطاقة الرقم القومي، مستندات السيارة، إثبات دخل", docsEn: "ID, car docs, proof of income" },
+      { nameAr: "قرض عقاري/تمويل عقاري", nameEn: "Mortgage / Home Finance", docsAr: "مستندات الملكية، إثبات دخل، مستندات التعهد", docsEn: "Property docs, proof of income, legal docs" }
+    ]
+  },
+
+  // 4) AlexBank (بنك الإسكندرية)
+  {
+    ar: "بنك الإسكندرية",
+    en: "AlexBank",
+    descAr: "قروض شخصية لِلموظفين والأفراد، برامج لذوي المهن الحرة والمتقاعدين، تمويل سيارة وعقاري.",
+    descEn: "Personal loans for employees/self-employed/pensioners, auto and mortgage finance.",
+    site: "https://www.alexbank.com",
+    loans: [
+      { nameAr: "قرض شخصي (لموظفين/حرين)", nameEn: "Personal Loan (Employed / Self-employed)", docsAr: "بطاقة الرقم القومي، كشف حساب 12 شهر (لحرّين)، إثبات دخل/تحويل مرتب", docsEn: "ID, 12-month bank statement (self-employed), proof of income/payroll" },
+      { nameAr: "قرض سيارة", nameEn: "Car Loan", docsAr: "بطاقة الرقم القومي، مستندات السيارة، إثبات دخل", docsEn: "ID, car docs, proof of income" },
+      { nameAr: "قرض تقاعد/متقاعدين", nameEn: "Pensioners Loan", docsAr: "بطاقة الرقم القومي، مستند تحويل المعاش، كشف حساب", docsEn: "ID, pension transfer doc, bank stmt" }
+    ]
+  },
+
+  // 5) QNB AlAhli
+  {
+    ar: "بنك QNB الأهلي",
+    en: "QNB AlAhli",
+    descAr: "قروض نقدية، برامج 'Easy Auto' للسيارات، رهن عقاري، ومنتجات مهنية ومشروعات صغيرة.",
+    descEn: "Cash loans, Easy Auto car finance, mortgage and SME facilities.",
+    site: "https://www.qnbalahli.com",
+    loans: [
+      { nameAr: "قرض نقدي / تحويل مرتب", nameEn: "Cash / Salary Loan", docsAr: "بطاقة الرقم القومي، تحويل مرتب أو إثبات دخل، كشف حساب", docsEn: "ID, payroll transfer/proof of income, bank stmt" },
+      { nameAr: "قرض سيارة (Easy Auto)", nameEn: "Car Loan (Easy Auto)", docsAr: "بطاقة الرقم القومي، مستندات السيارة/عقد الشراء، إثبات دخل", docsEn: "ID, car purchase docs, proof of income" },
+      { nameAr: "قرض عقاري", nameEn: "Mortgage / Home Loan", docsAr: "مستندات الملكية، إثبات دخل، مستندات قانونية", docsEn: "Property docs, proof of income, legal docs" }
+    ]
+  },
+
+  // 6) Banque du Caire (بنك القاهرة)
+  {
+    ar: "بنك القاهرة",
+    en: "Banque du Caire",
+    descAr: "قروض شخصية متنوعة (برامج للقطاع الحكومي والخاص والمتقاعدين)، تمويل سيارات وعقاري وبرامج متخصصة.",
+    descEn: "Personal loans for government/private/pensioners, auto & mortgage finance, specialized programs.",
+    site: "https://www.bdc.com.eg",
+    loans: [
+      { nameAr: "قرض شخصي", nameEn: "Personal Loan", docsAr: "بطاقة الرقم القومي، كشف مرتب/إثبات دخل، فاتورة مرافق", docsEn: "ID, salary slip/proof of income, utility bill" },
+      { nameAr: "قرض سيارة", nameEn: "Car Loan", docsAr: "بطاقة الرقم القومي، مستند شراء السيارة، إثبات دخل", docsEn: "ID, car purchase docs, proof of income" },
+      { nameAr: "قرض عقاري / رهن", nameEn: "Mortgage / Home Loan", docsAr: "مستندات الملكية، دفعة أولى، إثبات دخل", docsEn: "Property docs, down payment proof, proof of income" }
+    ]
+  },
+
+  // 7) Housing & Development Bank (بنك التعمير والإسكان)
+  {
+    ar: "بنك التعمير والإسكان",
+    en: "Housing & Development Bank",
+    descAr: "متخصص في التمويل العقاري وقروض الإسكان، بالإضافة للقروض الشخصية وتمويل السيارات وبرامج للقطاع العام والخاص.",
+    descEn: "Specialised in mortgage/housing finance, plus personal and auto loans and sector programs.",
+    site: "https://www.hdb-egy.com",
+    loans: [
+      { nameAr: "قرض إسكان / تمويل عقاري", nameEn: "Housing / Mortgage Loan", docsAr: "مستندات الملكية/عقد، إثبات دخل، مستندات قانونية للعقار", docsEn: "Property/legal docs, proof of income" },
+      { nameAr: "قرض سيارة", nameEn: "Auto Loan", docsAr: "بطاقة الرقم القومي، مستندات السيارة، إثبات دخل", docsEn: "ID, car docs, proof of income" },
+      { nameAr: "قرض للموظفين (بدون ضمان في بعض البرامج)", nameEn: "Employee Salary Loan (some programs unsecured)", docsAr: "بطاقة الرقم القومي، خطاب جهة عمل أو تحويل مرتب", docsEn: "ID, employment letter or payroll transfer" }
+    ]
+  },
+
+  // 8) SAIB Bank
+  {
+    ar: "بنك SAIB",
+    en: "SAIB Bank",
+    descAr: "قروض نقدية مرنة، قروض تعليمية، وخيارات تمويل متوافقة مع الشريعة الإسلامية أيضاً.",
+    descEn: "Flexible cash loans, education finance, and Sharia-compliant options.",
+    site: "https://www.saib.com.eg",
+    loans: [
+      { nameAr: "قرض نقدي / شخصي", nameEn: "Cash / Personal Loan", docsAr: "بطاقة الرقم القومي، كشف حساب/إثبات دخل", docsEn: "ID, bank statement or proof of income" },
+      { nameAr: "قرض تعليم", nameEn: "Education Loan", docsAr: "بطاقة الرقم القومي، مستندات القيد أو القبول، إثبات دخل/ضامن حسب الحالة", docsEn: "ID, enrollment documents, proof of income/guarantor" },
+      { nameAr: "تمويل إسلامي (مرابحة/إيجار تمويلي)", nameEn: "Islamic Financing (Murabaha/Ijara)", docsAr: "بطاقة الرقم القومي، مستندات الدخل، مستندات الأصل/الشراء", docsEn: "ID, proof of income, purchase docs" }
+    ]
+  },
+
+  // 9) Suez Canal Bank (بنك قناة السويس)
+  {
+    ar: "بنك قناة السويس",
+    en: "Suez Canal Bank",
+    descAr: "برامج متعددة: تمويل الشخصي، قروض للموظفين، قروض سيارات، تعليم، وبرامج مهنية وطبية.",
+    descEn: "Multiple programs: personal, payroll loans, auto, education and professional loans.",
+    site: "https://scbank.com.eg",
+    loans: [
+      { nameAr: "قرض بضمان الراتب / تحويل القسط", nameEn: "Salary-Backed / Installment Transfer Loan", docsAr: "بطاقة الرقم القومي، خطاب جهة عمل أو تحويل مرتب، كشف حساب", docsEn: "ID, employment letter/payroll transfer, bank stmt" },
+      { nameAr: "قرض سيارات", nameEn: "Car Loan", docsAr: "بطاقة الرقم القومي، عقد الشراء/مستندات السيارة، إثبات دخل", docsEn: "ID, car purchase docs, proof of income" },
+      { nameAr: "قرض تعليمي", nameEn: "Education Loan", docsAr: "بطاقة الرقم القومي، مستندات الجامعة/القبول، إثبات دخل/كفيل", docsEn: "ID, university/acceptance docs, proof of income/guarantor" }
+    ]
+  },
+
+  // 10) ADCB Egypt
+  {
+    ar: "بنك أبو ظبي التجاري (ADCB) - مصر",
+    en: "Abu Dhabi Commercial Bank (ADCB) Egypt",
+    descAr: "منتجات: قروض شخصية عالية المستوى، قروض سيارات (عادية وHigh-End)، قروض عقارية ومزايا للرواتب.",
+    descEn: "High-end personal loans, car loans (incl. high-end), mortgage and salary-based offers.",
+    site: "https://www.adcb.com.eg",
+    loans: [
+      { nameAr: "قرض شخصي عالي المستوى", nameEn: "High-End Personal Loan", docsAr: "بطاقة الرقم القومي، إثبات دخل/تحويل مرتب، كشف حساب", docsEn: "ID, proof of income/payroll transfer, bank stmt" },
+      { nameAr: "قرض سيارات (تقليدي وHigh-End)", nameEn: "Car Loan (Standard & High-End)", docsAr: "بطاقة الرقم القومي، مستندات السيارة، إثبات دخل", docsEn: "ID, car docs, proof of income" },
+      { nameAr: "قرض عقاري / Mortgage", nameEn: "Mortgage / Home Loan", docsAr: "مستندات الملكية، إثبات دخل، مستندات قانونية", docsEn: "Property docs, proof of income, legal docs" }
+    ]
+  }
+];
+
+// لغة الواجهة الحالية
+let lang = "ar";
+const list = document.getElementById("banksList");
+const searchBar = document.getElementById("searchBar");
+
+// دالة عرض البنوك (مع فلترة)
+function renderBanks(filter = "") {
+  list.innerHTML = "";
+  const q = (filter || "").toLowerCase().trim();
+
+  banks.forEach(bank => {
+    const bankName = lang === "ar" ? bank.ar : bank.en;
+    // هل اسم البنك أو أي قرض يحتوي على الكلمة؟
+    const hasMatch = bankName.toLowerCase().includes(q) || bank.loans.some(ln => (lang==="ar"?ln.nameAr:ln.nameEn).toLowerCase().includes(q)) || q === "";
+    if (!hasMatch) return;
+
+    const div = document.createElement("div");
+    div.className = "bank";
+
+    // بنية HTML للكارت
+    let loansHTML = "";
+    bank.loans.forEach(ln => {
+      const loanName = lang === "ar" ? ln.nameAr : ln.nameEn;
+      const docs = lang === "ar" ? ln.docsAr : ln.docsEn;
+      // إظهار القرض فقط لو فيه تطابق أو البحث فاضي
+      if (q === "" || loanName.toLowerCase().includes(q)) {
+        loansHTML += `<div class="loan"><h4>${loanName}</h4><p><strong>${lang==="ar"?"الأوراق المطلوبة:":"Required Documents:"}</strong> ${docs}</p></div>`;
+      }
+    });
+
+    div.innerHTML = `
+      <h2>${bankName}</h2>
+      <div class="details">
+        <div class="meta">
+          <div style="flex:1"><p>${lang==="ar"?bank.descAr:bank.descEn}</p></div>
+          <div style="min-width:220px"><p><strong>${lang==="ar"?"الموقع الرسمي:":"Official site:"}</strong> <a class="site" href="${bank.site}" target="_blank">${bank.site}</a></p></div>
+        </div>
+        <div class="loans">${loansHTML}</div>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+// أول عرض
+renderBanks();
+
+// افتح واقفل التفاصيل عند الضغط على عنوان البنك
+document.addEventListener("click", (e) => {
+  if (e.target.tagName === "H2") {
+    const details = e.target.nextElementSibling;
+    details.style.display = details.style.display === "block" ? "none" : "block";
+  }
+});
+
+// تبديل اللغة
+document.getElementById("langToggle").addEventListener("click", () => {
+  lang = lang === "ar" ? "en" : "ar";
+  document.body.dir = lang === "ar" ? "rtl" : "ltr";
+  document.getElementById("langToggle").textContent = lang === "ar" ? "English" : "العربية";
+  // نصوص الحاسبة
+  document.getElementById("calcTitle").textContent = lang === "ar" ? "حاسبة القرض التقريبية" : "Loan Calculator";
+  document.getElementById("calcDesc").textContent = lang === "ar" ? "أدخل المبلغ، نسبة الفائدة السنوية، وعدد السنوات لحساب القسط الشهري التقريبي." : "Enter amount, annual interest rate, and years to estimate monthly payment.";
+  // placeholder لشريط البحث
+  searchBar.placeholder = lang === "ar" ? "ابحث عن بنك أو نوع قرض..." : "Search bank or loan type...";
+  renderBanks(searchBar.value);
+});
+
+// فلترة مباشرة عند الكتابة
+searchBar.addEventListener("input", (e) => {
+  renderBanks(e.target.value);
+});
+
+// الحاسبة
+document.getElementById("calcBtn").addEventListener("click", () => {
+  const amount = parseFloat(document.getElementById("amount").value);
+  const annualRate = parseFloat(document.getElementById("rate").value);
+  const years = parseFloat(document.getElementById("years").value);
+  const res = document.getElementById("result");
+
+  if (isNaN(amount) || isNaN(annualRate) || isNaN(years) || years <= 0) {
+    res.textContent = lang === "ar" ? "⚠️ أدخل قيم صحيحة أولاً." : "⚠️ Please enter valid numbers.";
+    return;
+  }
+  const monthlyRate = (annualRate / 100) / 12;
+  const n = years * 12;
+  const monthly = (amount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -n));
+  res.textContent = (lang === "ar" ? "القسط الشهري التقريبي: " : "Estimated monthly payment: ") + monthly.toFixed(2) + " EGP";
+});
+</script>
+</body>
+</html>
